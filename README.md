@@ -10,7 +10,7 @@ Move all messages from one SQS queue, to another.
 ## Configuration
 
 AWS credentials file ~/.aws/credentials with `aws_access_key_id` and `aws_secret_access_key`  
-AWS config file with profiles
+AWS config file ~/.aws/config with required profiles
 
 ## Usage
 
