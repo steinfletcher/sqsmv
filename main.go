@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -10,33 +9,34 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/satori/go.uuid"
 )
+
 
 func main() {
 	src := flag.String("src", "", "source queue")
 	dest := flag.String("dest", "", "destination queue")
+	awsRegion := flag.String("region", "", "aws region")
+	awsProfile := flag.String("profile", "", "aws profile")
+	messageGroupId := flag.String("messageGroupId", "", "message group id for fifo queues only")
 	flag.Parse()
 
-	if *src == "" || *dest == "" {
+	if *src == "" || *dest == "" || *awsRegion == "" || *awsProfile == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	if os.Getenv("AWS_REGION") == "" {
-		fmt.Printf("AWS_REGION not set")
-		os.Exit(1)
-	}
-
-	region := os.Getenv("AWS_REGION")
-
 	log.Printf("source queue : %v", *src)
 	log.Printf("destination queue : %v", *dest)
+	log.Printf("region : %v", *awsRegion)
+	log.Printf("profile : %v", *awsProfile)
+	log.Printf("messageGroupId : %v", *messageGroupId)
 
-	config := &aws.Config{
-		Region: &region,
-	}
-
-	client := sqs.New(session.New(), config)
+	client := sqs.New(session.Must(session.NewSessionWithOptions(session.Options{
+		Config:            aws.Config{Region: awsRegion},
+		Profile:           *awsProfile,
+		SharedConfigState: session.SharedConfigEnable,
+	})))
 
 	maxMessages := int64(10)
 	waitTime := int64(0)
@@ -72,17 +72,40 @@ func main() {
 				defer wg.Done()
 
 				// write the message to the destination queue
-				smi := sqs.SendMessageInput{
-					MessageAttributes: m.MessageAttributes,
-					MessageBody:       m.Body,
-					QueueUrl:          dest,
-				}
+				if *messageGroupId == "" {
+					smi := sqs.SendMessageInput{
+						MessageAttributes: 			m.MessageAttributes,
+						MessageBody:       			m.Body,
+						QueueUrl:          			dest,
+					}
 
-				_, err := client.SendMessage(&smi)
+					_, err := client.SendMessage(&smi)
 
-				if err != nil {
-					log.Printf("ERROR sending message to destination %v", err)
-					return
+					if err != nil {
+						log.Printf("ERROR sending message to destination %v", err)
+						return
+					}
+
+				} else { // Add MessageGroupId and MessageDeduplicationIdn for fifo
+					msgDeduplicationId, err1 := uuid.NewV4()
+					if err1 != nil {
+						panic(err1)
+					}
+
+					smi := sqs.SendMessageInput{
+						MessageAttributes: 			m.MessageAttributes,
+						MessageBody:       			m.Body,
+						QueueUrl:          			dest,
+						MessageGroupId:    			messageGroupId,
+						MessageDeduplicationId: aws.String(msgDeduplicationId.String()),
+					}
+
+					_, err := client.SendMessage(&smi)
+
+					if err != nil {
+						log.Printf("ERROR sending message to destination %v", err)
+						return
+					}
 				}
 
 				// message was sent, dequeue from source queue
