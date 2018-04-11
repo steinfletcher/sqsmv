@@ -12,7 +12,6 @@ import (
 	"github.com/satori/go.uuid"
 )
 
-
 func main() {
 	src := flag.String("src", "", "source queue")
 	dest := flag.String("dest", "", "destination queue")
@@ -74,9 +73,9 @@ func main() {
 				// write the message to the destination queue
 				if *messageGroupId == "" {
 					smi := sqs.SendMessageInput{
-						MessageAttributes: 			m.MessageAttributes,
-						MessageBody:       			m.Body,
-						QueueUrl:          			dest,
+						MessageAttributes: m.MessageAttributes,
+						MessageBody:       m.Body,
+						QueueUrl:          dest,
 					}
 
 					_, err := client.SendMessage(&smi)
@@ -87,16 +86,13 @@ func main() {
 					}
 
 				} else { // Add MessageGroupId and MessageDeduplicationIdn for fifo
-					msgDeduplicationId, err1 := uuid.NewV4()
-					if err1 != nil {
-						panic(err1)
-					}
+					msgDeduplicationId := uuid.NewV4()
 
 					smi := sqs.SendMessageInput{
-						MessageAttributes: 			m.MessageAttributes,
-						MessageBody:       			m.Body,
-						QueueUrl:          			dest,
-						MessageGroupId:    			messageGroupId,
+						MessageAttributes:      m.MessageAttributes,
+						MessageBody:            m.Body,
+						QueueUrl:               dest,
+						MessageGroupId:         messageGroupId,
 						MessageDeduplicationId: aws.String(msgDeduplicationId.String()),
 					}
 
